@@ -21,6 +21,8 @@
 				<string>#082050</string>
 				<key>selection</key>
 				<string>#770811</string>
+				<key>guide</key>
+				<string>#002952</string>
 			</dict>
 		</dict>
 		<dict>
@@ -130,7 +132,7 @@
 			<key>name</key>
 			<string>Class name</string>
 			<key>scope</key>
-			<string>entity.name.class</string>
+			<string>entity.name.class, entity.name.type</string>
 			<key>settings</key>
 			<dict>
 				<key>fontStyle</key>
@@ -280,6 +282,54 @@
 				<string>#AE81FF</string>
 				<key>foreground</key>
 				<string>#F8F8F0</string>
+			</dict>
+		</dict>
+		<dict>
+			<key>name</key>
+			<string>Markup Quote</string>
+			<key>scope</key>
+			<string>markup.quote</string>
+			<key>settings</key>
+			<dict>
+				<key>foreground</key>
+				<string>#22aa44</string>
+			</dict>
+		</dict>
+		<dict>
+			<key>name</key>
+			<string>Markup Styling</string>
+			<key>scope</key>
+			<string>markup.bold, markup.italic</string>
+			<key>settings</key>
+			<dict>
+				<key>foreground</key>
+				<string>#22aa44</string>
+			</dict>
+		</dict>
+		<dict>
+			<key>name</key>
+			<string>Markup Inline</string>
+			<key>scope</key>
+			<string>markup.inline.raw</string>
+			<key>settings</key>
+			<dict>
+				<key>fontStyle</key>
+				<string></string>
+				<key>foreground</key>
+				<string>#9966b8</string>
+			</dict>
+		</dict>
+		<dict>
+			<key>name</key>
+			<string>Markup Setext Header</string>
+			<key>scope</key>
+			<string>markup.heading.setext</string>
+			<key>settings</key>
+			<dict>
+				<key>fontStyle</key>
+				<string></string>
+				<key>foreground</key>
+				<string>#ddbb88</string>
 			</dict>
 		</dict>
 	</array>

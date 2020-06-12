@@ -3,28 +3,38 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import nls = require('vs/nls');
-import { Promise } from 'vs/base/common/winjs.base';
+import { localize } from 'vs/nls';
+import { TPromise } from 'vs/base/common/winjs.base';
 import { Action } from 'vs/base/common/actions';
-import { IExtensionsService } from 'vs/workbench/parts/extensions/common/extensions';
-import { IQuickOpenService } from 'vs/workbench/services/quickopen/browser/quickOpenService';
+import severity from 'vs/base/common/severity';
+import paths = require('vs/base/common/paths');
+import { ReloadWindowAction } from 'vs/workbench/electron-browser/actions';
+import { IExtensionsWorkbenchService } from 'vs/workbench/parts/extensions/common/extensions';
+import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
+import { IMessageService } from 'vs/platform/message/common/message';
+import { IEnvironmentService } from 'vs/platform/environment/common/environment';
+import { remote } from 'electron';
+import { IWindowsService } from 'vs/platform/windows/common/windows';
 
-export class ListExtensionsAction extends Action {
+const dialog = remote.dialog;
 
-	static ID = 'workbench.extensions.action.listExtensions';
-	static LABEL = nls.localize('showInstalledExtensions', "Show Installed Extensions");
+export class OpenExtensionsFolderAction extends Action {
+
+	static ID = 'workbench.extensions.action.openExtensionsFolder';
+	static LABEL = localize('openExtensionsFolder', "Open Extensions Folder");
 
 	constructor(
 		id: string,
 		label: string,
-		@IExtensionsService private extensionsService: IExtensionsService,
-		@IQuickOpenService private quickOpenService: IQuickOpenService
+		@IWindowsService private windowsService: IWindowsService,
+		@IEnvironmentService private environmentService: IEnvironmentService
 	) {
 		super(id, label, null, true);
 	}
 
-	public run(): Promise {
-		return this.quickOpenService.show('ext ');
+	run(): TPromise<void> {
+		const extensionsHome = this.environmentService.extensionsPath;
+		return this.windowsService.showItemInFolder(paths.normalize(extensionsHome, true));
 	}
 
 	protected isEnabled(): boolean {
@@ -32,25 +42,39 @@ export class ListExtensionsAction extends Action {
 	}
 }
 
-export class InstallExtensionAction extends Action {
+export class InstallVSIXAction extends Action {
 
-	static ID = 'workbench.extensions.action.installExtension';
-	static LABEL = nls.localize('installExtension', "Install Extension");
+	static ID = 'workbench.extensions.action.installVSIX';
+	static LABEL = localize('installVSIX', "Install from VSIX...");
 
 	constructor(
-		id: string,
-		label: string,
-		@IExtensionsService private extensionsService: IExtensionsService,
-		@IQuickOpenService private quickOpenService: IQuickOpenService
+		id = InstallVSIXAction.ID,
+		label = InstallVSIXAction.LABEL,
+		@IExtensionsWorkbenchService private extensionsWorkbenchService: IExtensionsWorkbenchService,
+		@IMessageService private messageService: IMessageService,
+		@IInstantiationService private instantiationService: IInstantiationService
 	) {
-		super(id, label, null, true);
+		super(id, label, 'extension-action install-vsix', true);
 	}
 
-	public run(): Promise {
-		return this.quickOpenService.show('ext install ');
-	}
+	run(): TPromise<any> {
+		const result = dialog.showOpenDialog(remote.getCurrentWindow(), {
+			filters: [{ name: 'VSIX Extensions', extensions: ['vsix'] }],
+			properties: ['openFile']
+		});
 
-	protected isEnabled(): boolean {
-		return true;
+		if (!result) {
+			return TPromise.as(null);
+		}
+
+		return TPromise.join(result.map(vsix => this.extensionsWorkbenchService.install(vsix))).then(() => {
+			this.messageService.show(
+				severity.Info,
+				{
+					message: localize('InstallVSIXAction.success', "Successfully installed the extension. Restart to enable it."),
+					actions: [this.instantiationService.createInstance(ReloadWindowAction, ReloadWindowAction.ID, localize('InstallVSIXAction.reloadNow', "Reload Now"))]
+				}
+			);
+		});
 	}
 }

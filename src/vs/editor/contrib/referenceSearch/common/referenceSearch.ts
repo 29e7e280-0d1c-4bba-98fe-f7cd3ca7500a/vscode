@@ -5,9 +5,39 @@
 
 'use strict';
 
-import {IReferenceSupport} from 'vs/editor/common/modes';
-import LanguageFeatureRegistry from 'vs/editor/common/modes/languageFeatureRegistry';
+import { onUnexpectedExternalError } from 'vs/base/common/errors';
+import { TPromise } from 'vs/base/common/winjs.base';
+import { IReadOnlyModel } from 'vs/editor/common/editorCommon';
+import { CommonEditorRegistry } from 'vs/editor/common/editorCommonExtensions';
+import { Location, ReferenceProviderRegistry } from 'vs/editor/common/modes';
+import { asWinJsPromise } from 'vs/base/common/async';
+import { Position } from 'vs/editor/common/core/position';
 
-const ReferenceSearchRegistry = new LanguageFeatureRegistry<IReferenceSupport>('referenceSupport');
+export function provideReferences(model: IReadOnlyModel, position: Position): TPromise<Location[]> {
 
-export default ReferenceSearchRegistry;
+	// collect references from all providers
+	const promises = ReferenceProviderRegistry.ordered(model).map(provider => {
+		return asWinJsPromise((token) => {
+			return provider.provideReferences(model, position, { includeDeclaration: true }, token);
+		}).then(result => {
+			if (Array.isArray(result)) {
+				return <Location[]>result;
+			}
+			return undefined;
+		}, err => {
+			onUnexpectedExternalError(err);
+		});
+	});
+
+	return TPromise.join(promises).then(references => {
+		let result: Location[] = [];
+		for (let ref of references) {
+			if (ref) {
+				result.push(...ref);
+			}
+		}
+		return result;
+	});
+}
+
+CommonEditorRegistry.registerDefaultLanguageCommand('_executeReferenceProvider', provideReferences);

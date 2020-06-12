@@ -8,15 +8,27 @@ import Severity from 'vs/base/common/severity';
 import { TPromise } from 'vs/base/common/winjs.base';
 import { TerminateResponse } from 'vs/base/common/processes';
 import { IEventEmitter } from 'vs/base/common/eventEmitter';
+import * as Types from 'vs/base/common/types';
 
 import { ProblemMatcher } from 'vs/platform/markers/common/problemMatcher';
 
-export class TaskError {
-	public severity:Severity;
-	public message:string;
-	public code:number;
+export enum TaskErrors {
+	NotConfigured,
+	RunningTask,
+	NoBuildTask,
+	NoTestTask,
+	ConfigValidationError,
+	TaskNotFound,
+	NoValidTaskRunner,
+	UnknownError
+}
 
-	constructor(severity:Severity, message:string, code:number = -1) {
+export class TaskError {
+	public severity: Severity;
+	public message: string;
+	public code: TaskErrors;
+
+	constructor(severity: Severity, message: string, code: TaskErrors) {
 		this.severity = severity;
 		this.message = message;
 		this.code = code;
@@ -32,6 +44,9 @@ export interface TelemetryEvent {
 
 	// Whether the task ran successful
 	success: boolean;
+
+	// The exit code
+	exitCode?: number;
 }
 
 export namespace Triggers {
@@ -60,6 +75,87 @@ export namespace ShowOutput {
 	}
 }
 
+export interface CommandOptions {
+	/**
+	 * The current working directory of the executed program or shell.
+	 * If omitted VSCode's current workspace root is used.
+	 */
+	cwd?: string;
+
+	/**
+	 * The environment of the executed program or shell. If omitted
+	 * the parent process' environment is used.
+	 */
+	env?: { [key: string]: string; };
+}
+
+export interface ShellConfiguration {
+	/**
+	 * The shell executable.
+	 */
+	executable: string;
+	/**
+	 * The arguments to be passed to the shell executable.
+	 */
+	args?: string[];
+}
+
+export namespace ShellConfiguration {
+	export function is(value: any): value is ShellConfiguration {
+		let candidate: ShellConfiguration = value;
+		return candidate && Types.isString(candidate.executable) && (candidate.args === void 0 || Types.isStringArray(candidate.args));
+	}
+}
+
+export interface CommandConfiguration {
+	/**
+	 * The command to execute
+	 */
+	name?: string;
+
+	/**
+	 * Whether the command is a shell command or not
+	 */
+	isShellCommand?: boolean | ShellConfiguration;
+
+	/**
+	 * Additional command options.
+	 */
+	options?: CommandOptions;
+
+	/**
+	 * Command arguments.
+	 */
+	args?: string[];
+
+	/**
+	 * The task selector if needed.
+	 */
+	taskSelector?: string;
+
+	/**
+	 * Controls whether the executed command is printed to the output windows as well.
+	 */
+	echo?: boolean;
+}
+
+export interface CommandBinding {
+	/**
+	 * The command identifier the task is bound to.
+	 */
+	identifier: string;
+
+	/**
+	 * The title to use
+	 */
+	title: string;
+
+	/**
+	 * An optional category
+	 */
+	category?: string;
+}
+
 /**
  * A task description
  */
@@ -76,6 +172,16 @@ export interface TaskDescription {
 	name: string;
 
 	/**
+	 * The task's identifier.
+	 */
+	identifier: string;
+
+	/**
+	 * The command configuration
+	 */
+	command: CommandConfiguration;
+
+	/**
 	 * Suppresses the task name when calling the task using the task runner.
 	 */
 	suppressTaskName?: boolean;
@@ -87,9 +193,14 @@ export interface TaskDescription {
 	args?: string[];
 
 	/**
-	 * Whether the task is running in watching mode or not.
+	 * Whether the task is a background task or not.
 	 */
-	isWatching?: boolean;
+	isBackground?: boolean;
+
+	/**
+	 * Whether the task should prompt on close for confirmation if running.
+	 */
+	promptOnClose?: boolean;
 
 	/**
 	 * Controls whether the output of the running tasks is shown or not. Default
@@ -98,79 +209,58 @@ export interface TaskDescription {
 	showOutput: ShowOutput;
 
 	/**
-	 * Controls whether the executed command is printed to the output windows as well.
+	 * The other tasks this task depends on.
 	 */
-	echoCommand?: boolean;
+	dependsOn?: string[];
 
 	/**
 	 * The problem watchers to use for this task
 	 */
-	problemMatchers?:ProblemMatcher[];
+	problemMatchers?: ProblemMatcher[];
 }
-
-export interface CommandOptions {
-	/**
-	 * The current working directory of the executed program or shell.
-	 * If omitted VSCode's current workspace root is used.
-	 */
-	cwd?: string;
-
-	/**
-	 * The environment of the executed program or shell. If omitted
-	 * the parent process' environment is used.
-	 */
-	env?: { [key:string]: string; };
-}
-
 
 /**
  * Describs the settings of a task runner
  */
-export interface BaseTaskRunnerConfiguration {
+export interface TaskRunnerConfiguration {
+	/**
+	 * The inferred build tasks
+	 */
+	buildTasks: string[];
 
 	/**
-	 * The command to execute
+	 * The inferred test tasks;
 	 */
-	command?:string;
-
-	/**
-	 * Whether the task is a shell command or not
-	 */
-	isShellCommand?:boolean;
-
-	/**
-	 * Additional command options
-	 */
-	options?: CommandOptions;
-
-	/**
-	 * General args
-	 */
-	args?:string[];
+	testTasks: string[];
 
 	/**
 	 * The configured tasks
 	 */
-	tasks?: { [id:string]: TaskDescription; };
-}
-
-/**
- * Describs the settings of a task runner
- */
-export interface TaskRunnerConfiguration extends BaseTaskRunnerConfiguration {
-
-	/**
-	 * The command to execute. Not optional.
-	 */
-	command:string;
+	tasks?: { [id: string]: TaskDescription; };
 }
 
 export interface ITaskSummary {
+	/**
+	 * Exit code of the process.
+	 */
+	exitCode?: number;
 }
 
-export interface ITaskRunResult {
-	restartOnFileChanges?: string;
-	promise: TPromise<ITaskSummary>
+export enum TaskExecuteKind {
+	Started = 1,
+	Active = 2
+}
+
+export interface ITaskExecuteResult {
+	kind: TaskExecuteKind;
+	promise: TPromise<ITaskSummary>;
+	started?: {
+		restartOnFileChanges?: string;
+	};
+	active?: {
+		same: boolean;
+		background: boolean;
+	};
 }
 
 export namespace TaskSystemEvents {
@@ -190,24 +280,14 @@ export interface TaskEvent {
 }
 
 export interface ITaskSystem extends IEventEmitter {
-	build(): ITaskRunResult;
-	rebuild(): ITaskRunResult;
-	clean(): ITaskRunResult;
-	runTest(): ITaskRunResult;
-	run(taskIdentifier: string): ITaskRunResult;
+	build(): ITaskExecuteResult;
+	rebuild(): ITaskExecuteResult;
+	clean(): ITaskExecuteResult;
+	runTest(): ITaskExecuteResult;
+	run(taskIdentifier: string): ITaskExecuteResult;
 	isActive(): TPromise<boolean>;
 	isActiveSync(): boolean;
+	canAutoTerminate(): boolean;
 	terminate(): TPromise<TerminateResponse>;
 	tasks(): TPromise<TaskDescription[]>;
-}
-
-/**
- * Build configuration settings shared between program and
- * service build systems.
- */
-export interface TaskConfiguration {
-	/**
-	 * The build system to use. If omitted program is used.
-	 */
-	buildSystem?:string;
 }

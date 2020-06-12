@@ -5,7 +5,7 @@
 
 'use strict';
 
-import {SignatureHelpProvider, SignatureHelp, SignatureInformation, ParameterInformation, Uri, CancellationToken, TextLine, TextDocument, Position} from 'vscode';
+import { SignatureHelpProvider, SignatureHelp, SignatureInformation, CancellationToken, TextDocument, Position, workspace } from 'vscode';
 import phpGlobals = require('./phpGlobals');
 
 var _NL = '\n'.charCodeAt(0);
@@ -35,7 +35,7 @@ class BackwardIterator {
 	private lineNumber: number;
 	private offset: number;
 	private line: string;
-	private model : TextDocument;
+	private model: TextDocument;
 
 	constructor(model: TextDocument, offset: number, lineNumber: number) {
 		this.lineNumber = lineNumber;
@@ -44,11 +44,11 @@ class BackwardIterator {
 		this.model = model;
 	}
 
-	public hasNext() : boolean {
+	public hasNext(): boolean {
 		return this.lineNumber >= 0;
 	}
 
-	public next() : number {
+	public next(): number {
 		if (this.offset < 0) {
 			if (this.lineNumber > 0) {
 				this.lineNumber--;
@@ -56,7 +56,7 @@ class BackwardIterator {
 				this.offset = this.line.length - 1;
 				return _NL;
 			}
-			this.lineNumber = 0;
+			this.lineNumber = -1;
 			return BOF;
 		}
 		var ch = this.line.charCodeAt(this.offset);
@@ -70,24 +70,25 @@ class BackwardIterator {
 export default class PHPSignatureHelpProvider implements SignatureHelpProvider {
 
 	public provideSignatureHelp(document: TextDocument, position: Position, token: CancellationToken): Promise<SignatureHelp> {
-		console.log('provideSignatureHelp');
+		let enable = workspace.getConfiguration('php').get<boolean>('suggest.basic', true);
+		if (!enable) {
+			return null;
+		}
+
 		var iterator = new BackwardIterator(document, position.character - 1, position.line);
 
 		var paramCount = this.readArguments(iterator);
 		if (paramCount < 0) {
-			console.log('paramCount ' + 0);
 			return null;
 		}
 
 		var ident = this.readIdent(iterator);
 		if (!ident) {
-			console.log('ident ' + ident);
 			return null;
 		}
 
 		var entry = phpGlobals.globalfunctions[ident] || phpGlobals.keywords[ident];
 		if (!entry || !entry.signature) {
-			console.log('no entry ');
 			return null;
 		}
 		var paramsString = entry.signature.substring(0, entry.signature.lastIndexOf(')') + 1);
@@ -96,18 +97,16 @@ export default class PHPSignatureHelpProvider implements SignatureHelpProvider {
 		var re = /\w*\s+\&?\$[\w_\.]+|void/g;
 		var match: RegExpExecArray = null;
 		while ((match = re.exec(paramsString)) !== null) {
-			signatureInfo.parameters.push({ label: match[0], documentation: ''});
+			signatureInfo.parameters.push({ label: match[0], documentation: '' });
 		}
-
 		let ret = new SignatureHelp();
 		ret.signatures.push(signatureInfo);
 		ret.activeSignature = 0;
 		ret.activeParameter = Math.min(paramCount, signatureInfo.parameters.length - 1);
-		console.log(ret);
 		return Promise.resolve(ret);
 	}
 
-	private readArguments(iterator: BackwardIterator) : number {
+	private readArguments(iterator: BackwardIterator): number {
 		var parentNesting = 0;
 		var bracketNesting = 0;
 		var curlyNesting = 0;
@@ -142,8 +141,8 @@ export default class PHPSignatureHelpProvider implements SignatureHelpProvider {
 		return -1;
 	}
 
-	private isIdentPart(ch:number) : boolean {
-		if(ch === _USC || // _
+	private isIdentPart(ch: number): boolean {
+		if (ch === _USC || // _
 			ch >= _a && ch <= _z || // a-z
 			ch >= _A && ch <= _Z || // A-Z
 			ch >= _0 && ch <= _9 || // 0/9
@@ -154,7 +153,7 @@ export default class PHPSignatureHelpProvider implements SignatureHelpProvider {
 		return false;
 	}
 
-	private readIdent(iterator: BackwardIterator) : string {
+	private readIdent(iterator: BackwardIterator): string {
 		var identStarted = false;
 		var ident = '';
 		while (iterator.hasNext()) {
@@ -164,7 +163,7 @@ export default class PHPSignatureHelpProvider implements SignatureHelpProvider {
 			}
 			if (this.isIdentPart(ch)) {
 				identStarted = true;
-				ident= String.fromCharCode(ch) + ident;
+				ident = String.fromCharCode(ch) + ident;
 			} else if (identStarted) {
 				return ident;
 			}

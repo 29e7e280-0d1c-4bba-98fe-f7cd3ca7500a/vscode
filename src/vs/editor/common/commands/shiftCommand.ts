@@ -4,11 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
-import Strings = require('vs/base/common/strings');
-import {Range} from 'vs/editor/common/core/range';
-import {Selection} from 'vs/editor/common/core/selection';
-import EditorCommon = require('vs/editor/common/editorCommon');
-import {CursorMoveHelper} from 'vs/editor/common/controller/cursorMoveHelper';
+import * as strings from 'vs/base/common/strings';
+import { CursorColumns } from 'vs/editor/common/controller/cursorCommon';
+import { Range } from 'vs/editor/common/core/range';
+import { Selection } from 'vs/editor/common/core/selection';
+import { ICommand, ICursorStateComputerData, IEditOperationBuilder, ITokenizedModel } from 'vs/editor/common/editorCommon';
+import { LanguageConfigurationRegistry } from 'vs/editor/common/modes/languageConfigurationRegistry';
+import { CharCode } from 'vs/base/common/charCode';
 
 export interface IShiftCommandOpts {
 	isUnshift: boolean;
@@ -16,53 +18,54 @@ export interface IShiftCommandOpts {
 	oneIndent: string;
 }
 
-export class ShiftCommand implements EditorCommon.ICommand {
+export class ShiftCommand implements ICommand {
 
-	public static unshiftIndentCount(line:string, column:number, tabSize:number): number {
+	public static unshiftIndentCount(line: string, column: number, tabSize: number): number {
 		// Determine the visible column where the content starts
-		var contentStartVisibleColumn = CursorMoveHelper.visibleColumnFromColumn2(line, column, tabSize);
+		let contentStartVisibleColumn = CursorColumns.visibleColumnFromColumn(line, column, tabSize);
 
-		var desiredTabStop = CursorMoveHelper.prevTabColumn(contentStartVisibleColumn, tabSize);
+		let desiredTabStop = CursorColumns.prevTabStop(contentStartVisibleColumn, tabSize);
 
 		// The `desiredTabStop` is a multiple of `tabSize` => determine the number of indents
 		return desiredTabStop / tabSize;
 	}
 
-	public static shiftIndentCount(line:string, column:number, tabSize:number): number {
+	public static shiftIndentCount(line: string, column: number, tabSize: number): number {
 		// Determine the visible column where the content starts
-		var contentStartVisibleColumn = CursorMoveHelper.visibleColumnFromColumn2(line, column, tabSize);
+		let contentStartVisibleColumn = CursorColumns.visibleColumnFromColumn(line, column, tabSize);
 
-		var desiredTabStop = CursorMoveHelper.nextTabColumn(contentStartVisibleColumn, tabSize);
+		let desiredTabStop = CursorColumns.nextTabStop(contentStartVisibleColumn, tabSize);
 
 		// The `desiredTabStop` is a multiple of `tabSize` => determine the number of indents
 		return desiredTabStop / tabSize;
 	}
 
 	private _opts: IShiftCommandOpts;
-	private _selection: EditorCommon.IEditorSelection;
+	private _selection: Selection;
 	private _selectionId: string;
 	private _useLastEditRangeForCursorEndPosition: boolean;
 
-	constructor(range: EditorCommon.IEditorSelection, opts:IShiftCommandOpts) {
+	constructor(range: Selection, opts: IShiftCommandOpts) {
 		this._opts = opts;
 		this._selection = range;
 		this._useLastEditRangeForCursorEndPosition = false;
 	}
 
-	public getEditOperations(model: EditorCommon.ITokenizedModel, builder: EditorCommon.IEditOperationBuilder): void {
-		var startLine = this._selection.startLineNumber,
-			endLine = this._selection.endLineNumber;
+	public getEditOperations(model: ITokenizedModel, builder: IEditOperationBuilder): void {
+		let startLine = this._selection.startLineNumber;
+		let endLine = this._selection.endLineNumber;
 
 		if (this._selection.endColumn === 1 && startLine !== endLine) {
 			endLine = endLine - 1;
 		}
 
-		var lineNumber:number,
+		let lineNumber: number,
 			tabSize = this._opts.tabSize,
-			oneIndent = this._opts.oneIndent;
+			oneIndent = this._opts.oneIndent,
+			shouldIndentEmptyLines = (startLine === endLine);
 
 		// indents[i] represents i * oneIndent
-		var indents: string[] = ['', oneIndent];
+		let indents: string[] = ['', oneIndent];
 
 		// if indenting or outdenting on a whitespace only line
 		if (this._selection.isEmpty()) {
@@ -71,15 +74,21 @@ export class ShiftCommand implements EditorCommon.ICommand {
 			}
 		}
 
-		for (lineNumber = startLine; lineNumber <= endLine; lineNumber++) {
-			var lineText = model.getLineContent(lineNumber);
-			var indentationEndIndex = Strings.firstNonWhitespaceIndex(lineText);
+		// keep track of previous line's "miss-alignment"
+		let previousLineExtraSpaces = 0, extraSpaces = 0;
+		for (lineNumber = startLine; lineNumber <= endLine; lineNumber++ , previousLineExtraSpaces = extraSpaces) {
+			extraSpaces = 0;
+			let lineText = model.getLineContent(lineNumber);
+			let indentationEndIndex = strings.firstNonWhitespaceIndex(lineText);
 
-			if (this._opts.isUnshift) {
-				if (lineText.length === 0 || indentationEndIndex === 0) {
-					// empty line or line with no leading whitespace => nothing to do
-					continue;
-				}
+			if (this._opts.isUnshift && (lineText.length === 0 || indentationEndIndex === 0)) {
+				// empty line or line with no leading whitespace => nothing to do
+				continue;
+			}
+
+			if (!shouldIndentEmptyLines && !this._opts.isUnshift && lineText.length === 0) {
+				// do not indent empty lines => nothing to do
+				continue;
 			}
 
 			if (indentationEndIndex === -1) {
@@ -87,7 +96,45 @@ export class ShiftCommand implements EditorCommon.ICommand {
 				indentationEndIndex = lineText.length;
 			}
 
-			var desiredIndentCount: number;
+			if (lineNumber > 1) {
+				let contentStartVisibleColumn = CursorColumns.visibleColumnFromColumn(lineText, indentationEndIndex + 1, tabSize);
+				if (contentStartVisibleColumn % tabSize !== 0) {
+					// The current line is "miss-aligned", so let's see if this is expected...
+					// This can only happen when it has trailing commas in the indent
+					let enterAction = LanguageConfigurationRegistry.getRawEnterActionAtPosition(model, lineNumber - 1, model.getLineMaxColumn(lineNumber - 1));
+					if (enterAction) {
+						extraSpaces = previousLineExtraSpaces;
+						if (enterAction.appendText) {
+							for (let j = 0, lenJ = enterAction.appendText.length; j < lenJ && extraSpaces < tabSize; j++) {
+								if (enterAction.appendText.charCodeAt(j) === CharCode.Space) {
+									extraSpaces++;
+								} else {
+									break;
+								}
+							}
+						}
+						if (enterAction.removeText) {
+							extraSpaces = Math.max(0, extraSpaces - enterAction.removeText);
+						}
+
+						// Act as if `prefixSpaces` is not part of the indentation
+						for (let j = 0; j < extraSpaces; j++) {
+							if (indentationEndIndex === 0 || lineText.charCodeAt(indentationEndIndex - 1) !== CharCode.Space) {
+								break;
+							}
+							indentationEndIndex--;
+						}
+					}
+				}
+			}
+
+
+			if (this._opts.isUnshift && indentationEndIndex === 0) {
+				// line with no leading whitespace => nothing to do
+				continue;
+			}
+
+			let desiredIndentCount: number;
 			if (this._opts.isUnshift) {
 				desiredIndentCount = ShiftCommand.unshiftIndentCount(lineText, indentationEndIndex + 1, tabSize);
 			} else {
@@ -95,8 +142,8 @@ export class ShiftCommand implements EditorCommon.ICommand {
 			}
 
 			// Fill `indents`, as needed
-			for (var j = indents.length; j <= desiredIndentCount; j++) {
-				indents[j] = indents[j-1] + oneIndent;
+			for (let j = indents.length; j <= desiredIndentCount; j++) {
+				indents[j] = indents[j - 1] + oneIndent;
 			}
 
 			builder.addEditOperation(new Range(lineNumber, 1, lineNumber, indentationEndIndex + 1), indents[desiredIndentCount]);
@@ -105,9 +152,9 @@ export class ShiftCommand implements EditorCommon.ICommand {
 		this._selectionId = builder.trackSelection(this._selection);
 	}
 
-	public computeCursorState(model: EditorCommon.ITokenizedModel, helper: EditorCommon.ICursorStateComputerData): EditorCommon.IEditorSelection {
+	public computeCursorState(model: ITokenizedModel, helper: ICursorStateComputerData): Selection {
 		if (this._useLastEditRangeForCursorEndPosition) {
-			var lastOp = helper.getInverseEditOperations()[0];
+			let lastOp = helper.getInverseEditOperations()[0];
 			return new Selection(lastOp.range.endLineNumber, lastOp.range.endColumn, lastOp.range.endLineNumber, lastOp.range.endColumn);
 		}
 		return helper.getTrackedSelection(this._selectionId);

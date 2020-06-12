@@ -10,16 +10,13 @@ import * as Objects from 'vs/base/common/objects';
 import * as Strings from 'vs/base/common/strings';
 import * as Assert from 'vs/base/common/assert';
 import * as Paths from 'vs/base/common/paths';
-import * as NetWork from 'vs/base/common/network';
 import * as Types from 'vs/base/common/types';
+import * as UUID from 'vs/base/common/uuid';
 import Severity from 'vs/base/common/severity';
 import URI from 'vs/base/common/uri';
 
 import { ValidationStatus, ValidationState, ILogger, Parser } from 'vs/base/common/parsers';
 import { IStringDictionary } from 'vs/base/common/collections';
-
-import { IPluginDescription } from 'vs/platform/plugins/common/plugins';
-import { PluginsRegistry } from 'vs/platform/plugins/common/pluginsRegistry';
 
 import { IMarkerData } from 'vs/platform/markers/common/markers';
 
@@ -65,12 +62,10 @@ export interface ProblemPattern {
 
 	loop?: boolean;
 
-	mostSignifikant?: boolean;
-
-	[key:string]: any;
+	[key: string]: any;
 }
 
-export let problemPatternProperties = ['file', 'message', 'location', 'line', 'column', 'endLine', 'endColumn', 'code', 'severity', 'loop', 'mostSignifikant'];
+export let problemPatternProperties = ['file', 'message', 'location', 'line', 'column', 'endLine', 'endColumn', 'code', 'severity', 'loop'];
 
 export interface WatchingPattern {
 	regexp: RegExp;
@@ -110,7 +105,7 @@ export interface ProblemMatcher {
 	fileLocation: FileLocationKind;
 	filePrefix?: string;
 	pattern: ProblemPattern | ProblemPattern[];
-	severity?:Severity;
+	severity?: Severity;
 	watching?: WatchingMatcher;
 }
 
@@ -119,10 +114,10 @@ export interface NamedProblemMatcher extends ProblemMatcher {
 }
 
 export function isNamedProblemMatcher(value: ProblemMatcher): value is NamedProblemMatcher {
-	return Types.isString((<NamedProblemMatcher>value).name);
+	return Types.isString((<NamedProblemMatcher>value).name) ? true : false;
 }
 
-let valueMap: {[key:string]:string;} = {
+let valueMap: { [key: string]: string; } = {
 	E: 'error',
 	W: 'warning',
 	I: 'info',
@@ -137,7 +132,7 @@ interface Location {
 
 interface ProblemData {
 	file?: string;
-	location?:string;
+	location?: string;
 	line?: string;
 	column?: string;
 	endLine?: string;
@@ -145,7 +140,7 @@ interface ProblemData {
 	message?: string;
 	severity?: string;
 	code?: string;
-	[key:string]: string;
+	[key: string]: string;
 }
 
 export interface ProblemMatch {
@@ -159,7 +154,7 @@ export interface HandleResult {
 	continue: boolean;
 }
 
-export function getResource(filename:string, matcher: ProblemMatcher): URI {
+export function getResource(filename: string, matcher: ProblemMatcher): URI {
 	let kind = matcher.fileLocation;
 	let fullPath: string;
 	if (kind === FileLocationKind.Absolute) {
@@ -171,7 +166,7 @@ export function getResource(filename:string, matcher: ProblemMatcher): URI {
 	if (fullPath[0] !== '/') {
 		fullPath = '/' + fullPath;
 	}
-	return NetWork.URL.fromValue('file://' + fullPath);
+	return URI.parse('file://' + fullPath);
 }
 
 export interface ILineMatcher {
@@ -233,7 +228,7 @@ class AbstractLineMatcher implements ILineMatcher {
 	protected getMarkerMatch(data: ProblemData): ProblemMatch {
 		let location = this.getLocation(data);
 		if (data.file && location && data.message) {
-			let marker:IMarkerData = {
+			let marker: IMarkerData = {
 				severity: this.getSeverity(data),
 				startLineNumber: location.startLineNumber,
 				startColumn: location.startColumn,
@@ -250,9 +245,10 @@ class AbstractLineMatcher implements ILineMatcher {
 				marker: marker
 			};
 		}
+		return undefined;
 	}
 
-	protected getResource(filename:string):URI {
+	protected getResource(filename: string): URI {
 		return getResource(filename, this.matcher);
 	}
 
@@ -266,11 +262,11 @@ class AbstractLineMatcher implements ILineMatcher {
 		let startLine = parseInt(data.line);
 		let startColumn = data.column ? parseInt(data.column) : undefined;
 		let endLine = data.endLine ? parseInt(data.endLine) : undefined;
-		let endColumn = data.endColumn ? parseInt(data.endColumn): undefined;
+		let endColumn = data.endColumn ? parseInt(data.endColumn) : undefined;
 		return this.createLocation(startLine, startColumn, endLine, endColumn);
 	}
 
-	private parseLocationInfo(value:string):Location {
+	private parseLocationInfo(value: string): Location {
 		if (!value || !value.match(/(\d+|\d+,\d+|\d+,\d+,\d+,\d+)/)) {
 			return null;
 		}
@@ -284,9 +280,9 @@ class AbstractLineMatcher implements ILineMatcher {
 		}
 	}
 
-	private createLocation(startLine:number, startColumn:number, endLine:number, endColumn:number):Location {
-		if (startLine && startColumn && endLine && endColumn) {
-			return {startLineNumber: startLine, startColumn: startColumn, endLineNumber: endLine, endColumn: endColumn };
+	private createLocation(startLine: number, startColumn: number, endLine: number, endColumn: number): Location {
+		if (startLine && startColumn && endColumn) {
+			return { startLineNumber: startLine, startColumn: startColumn, endLineNumber: endLine || startLine, endColumn: endColumn };
 		}
 		if (startLine && startColumn) {
 			return { startLineNumber: startLine, startColumn: startColumn, endLineNumber: startLine, endColumn: startColumn };
@@ -294,8 +290,8 @@ class AbstractLineMatcher implements ILineMatcher {
 		return { startLineNumber: startLine, startColumn: 1, endLineNumber: startLine, endColumn: Number.MAX_VALUE };
 	}
 
-	private getSeverity(data: ProblemData):Severity {
-		let result:Severity = null;
+	private getSeverity(data: ProblemData): Severity {
+		let result: Severity = null;
 		if (data.severity) {
 			let value = data.severity;
 			if (value && value.length > 0) {
@@ -366,7 +362,7 @@ class MultiLineMatcher extends AbstractLineMatcher {
 			let pattern = this.patterns[i];
 			let matches = pattern.regexp.exec(lines[i + start]);
 			if (!matches) {
-				return { match: null, continue: false};
+				return { match: null, continue: false };
 			} else {
 				// Only the last pattern can loop
 				if (pattern.loop && i === this.patterns.length - 1) {
@@ -379,7 +375,7 @@ class MultiLineMatcher extends AbstractLineMatcher {
 		if (!loop) {
 			this.data = null;
 		}
-		return { match: this.getMarkerMatch(data), continue:  loop };
+		return { match: this.getMarkerMatch(data), continue: loop };
 	}
 
 	public next(line: string): ProblemMatch {
@@ -396,9 +392,9 @@ class MultiLineMatcher extends AbstractLineMatcher {
 	}
 }
 
-let _defaultPatterns:{ [name:string]: ProblemPattern | ProblemPattern[];} = Object.create(null);
+let _defaultPatterns: { [name: string]: ProblemPattern | ProblemPattern[]; } = Object.create(null);
 _defaultPatterns['msCompile'] = {
-	regexp: /^([^\s].*)\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\):\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.*)$/,
+	regexp: /^([^\s].*)\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.*)$/,
 	file: 1,
 	location: 2,
 	severity: 3,
@@ -498,6 +494,13 @@ _defaultPatterns['eslint-stylish'] = [
 		loop: true
 	}
 ];
+_defaultPatterns['go'] = {
+	regexp: /^([^:]*: )?((.:)?[^:]*):(\d+)(:(\d+))?: (.*)$/,
+	file: 2,
+	line: 4,
+	column: 6,
+	message: 7
+};
 
 export function defaultPattern(name: 'msCompile'): ProblemPattern;
 export function defaultPattern(name: 'tsc'): ProblemPattern;
@@ -507,6 +510,7 @@ export function defaultPattern(name: 'vb'): ProblemPattern;
 export function defaultPattern(name: 'lessCompile'): ProblemPattern;
 export function defaultPattern(name: 'jshint'): ProblemPattern;
 export function defaultPattern(name: 'gulp-tsc'): ProblemPattern;
+export function defaultPattern(name: 'go'): ProblemPattern;
 export function defaultPattern(name: 'jshint-stylish'): ProblemPattern[];
 export function defaultPattern(name: string): ProblemPattern | ProblemPattern[];
 export function defaultPattern(name: string): ProblemPattern | ProblemPattern[] {
@@ -600,7 +604,7 @@ export namespace Config {
 		*/
 		loop?: boolean;
 
-		[key:string]: any;
+		[key: string]: any;
 	}
 
 	/**
@@ -660,7 +664,7 @@ export namespace Config {
 		* The owner of the produced VSCode problem. This is typically
 		* the identifier of a VSCode language service if the problems are
 		* to be merged with the one produced by the language service
-		* or 'external'. Defaults to 'external' if omitted.
+		* or a generated internal id. Defaults to the generated internal id.
 		*/
 		owner?: string;
 
@@ -768,7 +772,7 @@ export class ProblemMatcherParser extends Parser {
 	private createProblemMatcher(description: Config.ProblemMatcher): ProblemMatcher {
 		let result: ProblemMatcher = null;
 
-		let owner = description.owner ? description.owner : 'external';
+		let owner = description.owner ? description.owner : UUID.generateUuid();
 		let applyTo = Types.isString(description.applyTo) ? ApplyToKind.fromString(description.applyTo) : ApplyToKind.allDocuments;
 		if (!applyTo) {
 			applyTo = ApplyToKind.allDocuments;
@@ -856,7 +860,7 @@ export class ProblemMatcherParser extends Parser {
 	private createProblemPattern(value: string | Config.ProblemPattern | Config.ProblemPattern[]): ProblemPattern | ProblemPattern[] {
 		let pattern: ProblemPattern;
 		if (Types.isString(value)) {
-			let variableName:string = <string>value;
+			let variableName: string = <string>value;
 			if (variableName.length > 1 && variableName[0] === '$') {
 				return defaultPattern(variableName.substring(1));
 			}
@@ -889,7 +893,7 @@ export class ProblemMatcherParser extends Parser {
 		return null;
 	}
 
-	private createSingleProblemPattern(value: Config.ProblemPattern, setDefaults:boolean): ProblemPattern {
+	private createSingleProblemPattern(value: Config.ProblemPattern, setDefaults: boolean): ProblemPattern {
 		let result: ProblemPattern = {
 			regexp: this.createRegularExpression(value.regexp)
 		};
@@ -902,14 +906,14 @@ export class ProblemMatcherParser extends Parser {
 			if (result.location) {
 				result = Objects.mixin(result, {
 					file: 1,
-					message: 4
+					message: 0
 				}, false);
 			} else {
 				result = Objects.mixin(result, {
 					file: 1,
 					line: 2,
 					column: 3,
-					message: 4
+					message: 0
 				}, false);
 			}
 		}
@@ -920,10 +924,10 @@ export class ProblemMatcherParser extends Parser {
 		let file: boolean, message: boolean, location: boolean, line: boolean;
 		let regexp: number = 0;
 		values.forEach(pattern => {
-			file = file || !!pattern.file;
-			message = message || !!pattern.message;
-			location = location || !!pattern.location;
-			line = line || !!pattern.line;
+			file = file || !Types.isUndefined(pattern.file);
+			message = message || !Types.isUndefined(pattern.message);
+			location = location || !Types.isUndefined(pattern.location);
+			line = line || !Types.isUndefined(pattern.line);
 			if (pattern.regexp) {
 				regexp++;
 			}
@@ -935,7 +939,7 @@ export class ProblemMatcherParser extends Parser {
 		if (!(file && message && (location || line))) {
 			this.status.state = ValidationState.Error;
 			this.log(NLS.localize('ProblemMatcherParser.problemPattern.missingProperty', 'The problem pattern is invalid. It must have at least a file, message and line or location match group.'));
-		};
+		}
 	}
 
 	private addWatchingMatcher(external: Config.ProblemMatcher, internal: ProblemMatcher): void {
@@ -946,7 +950,7 @@ export class ProblemMatcherParser extends Parser {
 				activeOnStart: false,
 				beginsPattern: { regexp: oldBegins },
 				endsPattern: { regexp: oldEnds }
-			}
+			};
 			return;
 		}
 		if (Types.isUndefinedOrNull(external.watching)) {
@@ -960,7 +964,7 @@ export class ProblemMatcherParser extends Parser {
 				activeOnStart: Types.isBoolean(watching.activeOnStart) ? watching.activeOnStart : false,
 				beginsPattern: begins,
 				endsPattern: ends
-			}
+			};
 			return;
 		}
 		if (begins || ends) {
@@ -969,7 +973,7 @@ export class ProblemMatcherParser extends Parser {
 		}
 	}
 
-	private createWatchingPattern(external: string| Config.WatchingPattern): WatchingPattern {
+	private createWatchingPattern(external: string | Config.WatchingPattern): WatchingPattern {
 		if (Types.isUndefinedOrNull(external)) {
 			return null;
 		}
@@ -986,10 +990,10 @@ export class ProblemMatcherParser extends Parser {
 		if (!regexp) {
 			return null;
 		}
-		return file ? { regexp, file} : { regexp };
+		return file ? { regexp, file } : { regexp };
 	}
 
-	private createRegularExpression(value:string):RegExp {
+	private createRegularExpression(value: string): RegExp {
 		let result: RegExp = null;
 		if (!value) {
 			return result;
@@ -1004,7 +1008,7 @@ export class ProblemMatcherParser extends Parser {
 	}
 }
 
-// let problemMatchersExtPoint = PluginsRegistry.registerExtensionPoint<Config.NamedProblemMatcher | Config.NamedProblemMatcher[]>('problemMatchers', {
+// let problemMatchersExtPoint = ExtensionsRegistry.registerExtensionPoint<Config.NamedProblemMatcher | Config.NamedProblemMatcher[]>('problemMatchers', {
 // TODO@Dirk: provide here JSON schema for extension point
 // });
 
@@ -1028,16 +1032,16 @@ export class ProblemMatcherRegistry {
 		*/
 	}
 
-	private onProblemMatcher(json: Config.NamedProblemMatcher): void {
-		let logger: ILogger = {
-			log: (message) => { console.warn(message); }
-		}
-		let parser = new ProblemMatcherParser(this, logger);
-		let result = parser.parse(json);
-		if (isNamedProblemMatcher(result) && parser.status.isOK()) {
-			this.add(result.name, result);
-		}
-	}
+	// private onProblemMatcher(json: Config.NamedProblemMatcher): void {
+	// 	let logger: ILogger = {
+	// 		log: (message) => { console.warn(message); }
+	// 	}
+	// 	let parser = new ProblemMatcherParser(this, logger);
+	// 	let result = parser.parse(json);
+	// 	if (isNamedProblemMatcher(result) && parser.status.isOK()) {
+	// 		this.add(result.name, result);
+	// 	}
+	// }
 
 	public add(name: string, matcher: ProblemMatcher): void {
 		this.matchers[name] = matcher;
@@ -1089,8 +1093,8 @@ let matcher = {
 	pattern: defaultPattern('tsc'),
 	watching: {
 		activeOnStart: true,
-		beginsPattern: { regexp: /^\s*message TS6032: File change detected. Starting incremental compilation.../ },
-		endsPattern: { regexp: /^\s*message TS6042: Compilation complete. Watching for file changes./ }
+		beginsPattern: { regexp: /^\s*(?:message TS6032:|\d{1,2}:\d{1,2}:\d{1,2}(?: AM| PM)? -) File change detected\. Starting incremental compilation\.\.\./ },
+		endsPattern: { regexp: /^\s*(?:message TS6042:|\d{1,2}:\d{1,2}:\d{1,2}(?: AM| PM)? -) Compilation complete\. Watching for file changes\./ }
 	}
 };
 (<any>matcher).tscWatch = true;
@@ -1105,21 +1109,21 @@ registry.add('gulp-tsc', {
 });
 
 registry.add('jshint', {
-	owner: 'javascript',
+	owner: 'jshint',
 	applyTo: ApplyToKind.allDocuments,
 	fileLocation: FileLocationKind.Absolute,
 	pattern: defaultPattern('jshint')
 });
 
 registry.add('jshint-stylish', {
-	owner: 'javascript',
+	owner: 'jshint',
 	applyTo: ApplyToKind.allDocuments,
 	fileLocation: FileLocationKind.Absolute,
 	pattern: defaultPattern('jshint-stylish')
 });
 
 registry.add('eslint-compact', {
-	owner: 'javascript',
+	owner: 'eslint',
 	applyTo: ApplyToKind.allDocuments,
 	fileLocation: FileLocationKind.Relative,
 	filePrefix: '${cwd}',
@@ -1127,9 +1131,16 @@ registry.add('eslint-compact', {
 });
 
 registry.add('eslint-stylish', {
-	owner: 'javascript',
+	owner: 'eslint',
+	applyTo: ApplyToKind.allDocuments,
+	fileLocation: FileLocationKind.Absolute,
+	pattern: defaultPattern('eslint-stylish')
+});
+
+registry.add('go', {
+	owner: 'go',
 	applyTo: ApplyToKind.allDocuments,
 	fileLocation: FileLocationKind.Relative,
 	filePrefix: '${cwd}',
-	pattern: defaultPattern('eslint-stylish')
+	pattern: defaultPattern('go')
 });

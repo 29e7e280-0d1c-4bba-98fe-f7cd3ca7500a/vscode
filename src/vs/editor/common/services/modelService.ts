@@ -4,33 +4,36 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
-import {TPromise} from 'vs/base/common/winjs.base';
-import {createDecorator, ServiceIdentifier} from 'vs/platform/instantiation/common/instantiation';
-import EditorCommon = require('vs/editor/common/editorCommon');
-import Modes = require('vs/editor/common/modes');
-import {EventProvider} from 'vs/base/common/eventProvider';
+import Event from 'vs/base/common/event';
 import URI from 'vs/base/common/uri';
-import {URL} from 'vs/base/common/network';
+import { TPromise } from 'vs/base/common/winjs.base';
+import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
+import { IModel, ITextSource2, ITextModelCreationOptions } from 'vs/editor/common/editorCommon';
+import { IMode } from 'vs/editor/common/modes';
 
 export var IModelService = createDecorator<IModelService>('modelService');
 
 export interface IModelService {
-	serviceId: ServiceIdentifier<any>;
+	_serviceBrand: any;
 
-	createModel(value:string, modeOrPromise:TPromise<Modes.IMode>|Modes.IMode, resource: URL): EditorCommon.IModel;
+	createModel(value: string | ITextSource2, modeOrPromise: TPromise<IMode> | IMode, resource: URI): IModel;
 
-	destroyModel(resource: URL): void;
+	updateModel(model: IModel, value: string | ITextSource2): void;
 
-	removeModel(model: EditorCommon.IModel): void;
+	setMode(model: IModel, modeOrPromise: TPromise<IMode> | IMode): void;
 
-	getModels(): EditorCommon.IModel[];
+	destroyModel(resource: URI): void;
 
-	getModel(resource: URI): EditorCommon.IModel;
+	getModels(): IModel[];
 
-	onModelAdded: EventProvider<(model: EditorCommon.IModel) => void>;
+	getCreationOptions(language: string): ITextModelCreationOptions;
 
-	onModelRemoved: EventProvider<(model: EditorCommon.IModel) => void>;
+	getModel(resource: URI): IModel;
 
-	onModelModeChanged: EventProvider<(model: EditorCommon.IModel, oldModeId:string) => void>;
+	onModelAdded: Event<IModel>;
+
+	onModelRemoved: Event<IModel>;
+
+	onModelModeChanged: Event<{ model: IModel; oldModeId: string; }>;
 }
 

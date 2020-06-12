@@ -6,7 +6,7 @@
 .quick-open-widget {
 	position: absolute;
 	width: 600px;
-	z-index: 2050;
+	z-index: 2000;
 	padding-bottom: 6px;
 	left: 50%;
 	margin-left: -300px;
@@ -28,30 +28,31 @@
 	width: 588px;
 	border: none;
 	margin: 6px;
-	outline: 0;
 }
 
 .quick-open-widget .quick-open-input .monaco-inputbox {
 	width: 100%;
+	height: 25px;
 }
 
 .quick-open-widget .quick-open-tree {
 	line-height: 1.8em;
-	height: 0; /* need an initial height to trigger transition on first open */
 }
 
-.quick-open-widget .quick-open-tree.transition {
-	-webkit-transition:	height 100ms ease-in;
-	-ms-transition:		height 100ms ease-in;
-	-moz-transition:	height 100ms ease-in;
-	-khtml-transition:	height 100ms ease-in;
-	-o-transition:		height 100ms ease-in;
-	transition:			height 100ms ease-in;
+.quick-open-widget.content-changing .quick-open-tree .monaco-scrollable-element .slider {
+	display: none; /* scrollbar slider causes some hectic updates when input changes quickly, so hide it while quick open changes */
 }
 
 .quick-open-widget .quick-open-tree .quick-open-entry {
 	overflow: hidden;
 	text-overflow: ellipsis;
+	display: flex;
+	flex-direction: column;
+}
+
+.quick-open-widget .quick-open-tree .quick-open-entry > .row {
+	display: flex;
+	align-items: center;
 }
 
 .quick-open-widget .quick-open-tree .quick-open-entry .quick-open-entry-icon {
@@ -61,6 +62,7 @@
 	margin-right: 4px;
 	display: inline-block;
 	vertical-align: middle;
+	flex-shrink: 0;
 }
 
 .quick-open-widget .quick-open-tree .quick-open-entry .quick-open-help-entry-label {
@@ -75,19 +77,30 @@
 
 .quick-open-widget .quick-open-tree .quick-open-entry-meta {
 	opacity: 0.7;
-	margin-left: 0.5em;
+	line-height: normal;
 }
 
 .quick-open-widget .quick-open-tree .quick-open-entry-description {
 	opacity: 0.7;
 	margin-left: 0.5em;
 	font-size: 0.9em;
+	overflow: hidden;
+	flex: 1;
+	text-overflow: ellipsis;
 }
 
 .quick-open-widget .quick-open-tree .results-group {
 	float: right;
-	opacity: 0.6;
 	margin-right: 18px;
+}
+
+.vs .quick-open-widget .quick-open-tree .results-group,
+.vs-dark .quick-open-widget .quick-open-tree .results-group {
+	opacity: 0.6;
+}
+
+.quick-open-widget .quick-open-tree .content.has-actions .results-group {
+	margin-right: 34px; /* push more to the right if we have actions */
 }
 
 .quick-open-widget .quick-open-tree .results-group-separator {
@@ -102,22 +115,12 @@
 
 .quick-open-widget {
 	background-color: #F6F6F6;
-	box-shadow: 0 2px 8px #A8A8A8;
-}
-
-.quick-open-widget.no-shadow {
-	box-shadow: none;
-	border: 1px solid #E6E6E6;
+	box-shadow: 0 5px 8px #A8A8A8;
 }
 
 .vs-dark .quick-open-widget {
 	background-color: #252526;
-	box-shadow: 0 2px 8px #000;
-}
-
-.vs-dark .quick-open-widget.no-shadow {
-	box-shadow: none;
-	border: 1px solid #000;
+	box-shadow: 0 5px 8px #000;
 }
 
 .vs-dark .quick-open-widget input {
@@ -150,12 +153,20 @@
 	color: #0097FB;
 }
 
+.hc-black .quick-open-widget .quick-open-tree .results-group {
+	color: white;
+}
+
 .quick-open-widget .quick-open-tree .results-group-separator {
 	border-top-color: #CCCEDB;
 }
 
 .vs-dark .quick-open-widget .quick-open-tree .results-group-separator {
 	border-top-color: #3F3F46;
+}
+
+.hc-black .quick-open-widget .quick-open-tree .results-group-separator {
+	border-top-color: white;
 }
 
 .quick-open-widget .quick-open-tree .monaco-highlighted-label .highlight {
@@ -165,6 +176,12 @@
 
 .vs-dark .quick-open-widget .quick-open-tree .monaco-highlighted-label .highlight {
 	color: #0097FB;
+}
+
+.quick-open-widget .monaco-tree.focused .monaco-tree-rows > .monaco-tree-row.selected,
+.quick-open-widget .monaco-tree.focused .monaco-tree-rows > .monaco-tree-row.selected.focused {
+	background: #DCEBFC;
+	color: inherit;
 }
 
 /* High Contrast Theming */

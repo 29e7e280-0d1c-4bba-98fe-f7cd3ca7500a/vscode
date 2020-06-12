@@ -1,7 +1,8 @@
-/* --------------------------------------------------------------------------------------------
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for license information.
- * ------------------------------------------------------------------------------------------ */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 'use strict';
 
 import path = require('path');
@@ -16,7 +17,7 @@ export interface IForkOptions {
 	execArgv?: string[];
 }
 
-function makeRandomHexString(length:number): string {
+function makeRandomHexString(length: number): string {
 	let chars = ['0', '1', '2', '3', '4', '5', '6', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'];
 	let result = '';
 	for (let i = 0; i < length; i++) {
@@ -36,22 +37,23 @@ function generatePipeName(): string {
 	return path.join(os.tmpdir(), randomName + '.sock');
 }
 
-function generatePatchedEnv(env:any, stdInPipeName:string, stdOutPipeName:string): any {
+function generatePatchedEnv(env: any, stdInPipeName: string, stdOutPipeName: string, stdErrPipeName: string): any {
 	// Set the two unique pipe names and the electron flag as process env
 
-	var newEnv:any = {};
+	var newEnv: any = {};
 	for (var key in env) {
 		newEnv[key] = env[key];
 	}
 
 	newEnv['STDIN_PIPE_NAME'] = stdInPipeName;
 	newEnv['STDOUT_PIPE_NAME'] = stdOutPipeName;
-	newEnv['ATOM_SHELL_INTERNAL_RUN_AS_NODE'] = '1';
+	newEnv['STDERR_PIPE_NAME'] = stdErrPipeName;
+	newEnv['ELECTRON_RUN_AS_NODE'] = '1';
 
 	return newEnv;
 }
 
-export function fork(modulePath: string, args: string[], options: IForkOptions, callback:(error:any, cp:cp.ChildProcess)=>void): void {
+export function fork(modulePath: string, args: string[], options: IForkOptions, callback: (error: any, cp: cp.ChildProcess | null) => void): void {
 
 	var callbackCalled = false;
 	var resolve = (result: cp.ChildProcess) => {
@@ -61,7 +63,7 @@ export function fork(modulePath: string, args: string[], options: IForkOptions, 
 		callbackCalled = true;
 		callback(null, result);
 	};
-	var reject = (err:any) => {
+	var reject = (err: any) => {
 		if (callbackCalled) {
 			return;
 		}
@@ -69,29 +71,38 @@ export function fork(modulePath: string, args: string[], options: IForkOptions, 
 		callback(err, null);
 	};
 
-	// Generate two unique pipe names
+	// Generate three unique pipe names
 	var stdInPipeName = generatePipeName();
 	var stdOutPipeName = generatePipeName();
+	let stdErrPipeName = generatePipeName();
 
-	var newEnv = generatePatchedEnv(options.env || process.env, stdInPipeName, stdOutPipeName);
+
+	var newEnv = generatePatchedEnv(options.env || process.env, stdInPipeName, stdOutPipeName, stdErrPipeName);
 
 	var childProcess: cp.ChildProcess;
 
+	// Begin listening to stderr pipe
+	let stdErrServer = net.createServer((stdErrStream) => {
+		// From now on the childProcess.stderr is available for reading
+		childProcess.stderr = stdErrStream;
+	});
+	stdErrServer.listen(stdErrPipeName);
+
 	// Begin listening to stdout pipe
-	var server = net.createServer((stream) => {
+	let stdOutServer = net.createServer((stdOutStream) => {
 		// The child process will write exactly one chunk with content `ready` when it has installed a listener to the stdin pipe
 
-		stream.once('data', (chunk:Buffer) => {
+		stdOutStream.once('data', (_chunk: Buffer) => {
 			// The child process is sending me the `ready` chunk, time to connect to the stdin pipe
 			childProcess.stdin = <any>net.connect(stdInPipeName);
 
 			// From now on the childProcess.stdout is available for reading
-			childProcess.stdout = stream;
+			childProcess.stdout = stdOutStream;
 
 			resolve(childProcess);
 		});
 	});
-	server.listen(stdOutPipeName);
+	stdOutServer.listen(stdOutPipeName);
 
 	var serverClosed = false;
 	var closeServer = () => {
@@ -99,8 +110,9 @@ export function fork(modulePath: string, args: string[], options: IForkOptions, 
 			return;
 		}
 		serverClosed = true;
-		server.close();
-	}
+		stdOutServer.close();
+		stdErrServer.close();
+	};
 
 	// Create the process
 	let bootstrapperPath = path.join(__dirname, 'electronForkStart');
@@ -111,12 +123,12 @@ export function fork(modulePath: string, args: string[], options: IForkOptions, 
 		execArgv: options.execArgv
 	});
 
-	childProcess.once('error', (err:Error) => {
+	childProcess.once('error', (err: Error) => {
 		closeServer();
 		reject(err);
 	});
 
-	childProcess.once('exit', (err:Error) => {
+	childProcess.once('exit', (err: Error) => {
 		closeServer();
 		reject(err);
 	});

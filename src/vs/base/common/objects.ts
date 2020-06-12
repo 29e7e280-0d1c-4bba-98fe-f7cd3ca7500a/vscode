@@ -6,23 +6,13 @@
 
 import * as Types from 'vs/base/common/types';
 
-/**
- * Equalable objects can compute a
- * hash-code and can also tell if they
- * are equal to other objects
- */
-export interface IEqualable {
-	hashCode(): number;
-	equals(other: any): boolean;
-}
-
-
 export function clone<T>(obj: T): T {
 	if (!obj || typeof obj !== 'object') {
 		return obj;
 	}
 	if (obj instanceof RegExp) {
-		return obj;
+		// See https://github.com/Microsoft/TypeScript/issues/10990
+		return obj as any;
 	}
 	var result = (Array.isArray(obj)) ? <any>[] : <any>{};
 	Object.keys(obj).forEach((key) => {
@@ -158,12 +148,8 @@ export function assign(destination: any, ...sources: any[]): any {
 	return destination;
 }
 
-/**
- * Returns a new object that has all values of {{obj}}
- * plus those from {{defaults}}.
- */
-export function withDefaults<T>(obj: T, defaults: T): T {
-	return mixin(clone(defaults), obj || {});
+export function toObject<T, R>(arr: T[], keyMap: (T) => string, valueMap: (T) => R = x => x): { [key: string]: R } {
+	return arr.reduce((o, d) => assign(o, { [keyMap(d)]: valueMap(d) }), Object.create(null));
 }
 
 export function equals(one: any, other: any): boolean {
@@ -196,13 +182,13 @@ export function equals(one: any, other: any): boolean {
 			}
 		}
 	} else {
-		var oneKeys:string[] = [];
+		var oneKeys: string[] = [];
 
 		for (key in one) {
 			oneKeys.push(key);
 		}
 		oneKeys.sort();
-		var otherKeys:string[] = [];
+		var otherKeys: string[] = [];
 		for (key in other) {
 			otherKeys.push(key);
 		}
@@ -300,4 +286,9 @@ export function safeStringify(obj: any): string {
 		}
 		return value;
 	});
+}
+
+export function getOrDefault<T, R>(obj: T, fn: (obj: T) => R, defaultValue: R = null): R {
+	const result = fn(obj);
+	return typeof result === 'undefined' ? defaultValue : result;
 }

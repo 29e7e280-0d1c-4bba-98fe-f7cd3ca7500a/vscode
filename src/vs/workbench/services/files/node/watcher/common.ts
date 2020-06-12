@@ -5,11 +5,8 @@
 
 'use strict';
 
-import arrays = require('vs/base/common/arrays');
 import uri from 'vs/base/common/uri';
-import paths = require('vs/base/common/paths');
-import {FileChangeType, FileChangesEvent} from 'vs/platform/files/common/files';
-import {IEventService} from 'vs/platform/event/common/event';
+import { FileChangeType, FileChangesEvent, isParent } from 'vs/platform/files/common/files';
 
 export interface IRawFileChange {
 	type: FileChangeType;
@@ -28,7 +25,7 @@ export function toFileChangesEvent(changes: IRawFileChange[]): FileChangesEvent 
 }
 
 /**
- * Given events that occured, applies some rules to normalize the events
+ * Given events that occurred, applies some rules to normalize the events
  */
 export function normalize(changes: IRawFileChange[]): IRawFileChange[] {
 
@@ -88,8 +85,8 @@ class EventNormalizer {
 	}
 
 	public normalize(): IRawFileChange[] {
-		let addedChangeEvents:IRawFileChange[] = [];
-		let deletedPaths:string[] = [];
+		let addedChangeEvents: IRawFileChange[] = [];
+		let deletedPaths: string[] = [];
 
 		// This algorithm will remove all DELETE events up to the root folder
 		// that got deleted if any. This ensures that we are not producing
@@ -108,7 +105,7 @@ class EventNormalizer {
 		}).sort((e1, e2) => {
 			return e1.path.length - e2.path.length; // shortest path first
 		}).filter(e => {
-			if (deletedPaths.some(d => this.isParent(e.path, d))) {
+			if (deletedPaths.some(d => isParent(e.path, d))) {
 				return false; // DELETE is ignored if parent is deleted already
 			}
 
@@ -117,9 +114,5 @@ class EventNormalizer {
 
 			return true;
 		}).concat(addedChangeEvents);
-	}
-
-	private isParent(p:string, candidate:string): boolean {
-		return p.indexOf(candidate + paths.nativeSep) === 0;
 	}
 }

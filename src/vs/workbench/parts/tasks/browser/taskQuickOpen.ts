@@ -5,16 +5,12 @@
 'use strict';
 
 import nls = require('vs/nls');
-import Objects = require('vs/base/common/objects');
-import Arrays = require('vs/base/common/arrays');
 import Filters = require('vs/base/common/filters');
 import { TPromise } from 'vs/base/common/winjs.base';
-import Severity from 'vs/base/common/severity';
 import Quickopen = require('vs/workbench/browser/quickopen');
-import QuickOpen = require('vs/base/parts/quickopen/browser/quickOpen');
+import QuickOpen = require('vs/base/parts/quickopen/common/quickOpen');
 import Model = require('vs/base/parts/quickopen/browser/quickOpenModel');
-import Common = require('vs/base/parts/quickopen/browser/quickOpen');
-import {IQuickOpenService} from 'vs/workbench/services/quickopen/browser/quickOpenService';
+import { IQuickOpenService } from 'vs/platform/quickOpen/common/quickOpen';
 
 import { ITaskService, TaskDescription } from 'vs/workbench/parts/tasks/common/taskService';
 
@@ -23,7 +19,7 @@ class TaskEntry extends Model.QuickOpenEntry {
 	private taskService: ITaskService;
 	private task: TaskDescription;
 
-	constructor(taskService: ITaskService, task: TaskDescription, highlights:Model.IHighlight[] = []) {
+	constructor(taskService: ITaskService, task: TaskDescription, highlights: Model.IHighlight[] = []) {
 		super(highlights);
 		this.taskService = taskService;
 		this.task = task;
@@ -33,7 +29,11 @@ class TaskEntry extends Model.QuickOpenEntry {
 		return this.task.name;
 	}
 
-	public run(mode:QuickOpen.Mode, context:Model.IContext):boolean {
+	public getAriaLabel(): string {
+		return nls.localize('entryAriaLabel', "{0}, tasks", this.getLabel());
+	}
+
+	public run(mode: QuickOpen.Mode, context: Model.IContext): boolean {
 		if (mode === QuickOpen.Mode.PREVIEW) {
 			return false;
 		}
@@ -57,13 +57,17 @@ export class QuickOpenHandler extends Quickopen.QuickOpenHandler {
 		this.taskService = taskService;
 	}
 
+	public getAriaLabel(): string {
+		return nls.localize('tasksAriaLabel', "Type the name of a task to run");
+	}
+
 	public getResults(input: string): TPromise<Model.QuickOpenModel> {
 		return this.taskService.tasks().then(tasks => tasks
 			.sort((a, b) => a.name.localeCompare(b.name))
 			.map(task => ({ task: task, highlights: Filters.matchesContiguousSubString(input, task.name) }))
 			.filter(({ highlights }) => !!highlights)
 			.map(({ task, highlights }) => new TaskEntry(this.taskService, task, highlights))
-		, _ => []).then(e => new Model.QuickOpenModel(e));
+			, _ => []).then(e => new Model.QuickOpenModel(e));
 	}
 
 	public getClass(): string {
@@ -74,13 +78,13 @@ export class QuickOpenHandler extends Quickopen.QuickOpenHandler {
 		return true;
 	}
 
-	public getAutoFocus(input:string): Common.IAutoFocus {
+	public getAutoFocus(input: string): QuickOpen.IAutoFocus {
 		return {
 			autoFocusFirstEntry: !!input
 		};
 	}
 
-	public onClose(canceled:boolean): void {
+	public onClose(canceled: boolean): void {
 		return;
 	}
 
