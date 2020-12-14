@@ -2,10 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
-import nls = require('vs/nls');
-import strings = require('vs/base/common/strings');
+import * as strings from 'vs/base/common/strings';
 
 enum Severity {
 	Ignore = 0,
@@ -16,15 +14,10 @@ enum Severity {
 
 namespace Severity {
 
-	var _error = 'error',
-		_warning = 'warning',
-		_warn = 'warn',
-		_info = 'info';
-
-	var _displayStrings: { [value: number]: string; } = Object.create(null);
-	_displayStrings[Severity.Error] = nls.localize('sev.error', "Error");
-	_displayStrings[Severity.Warning] = nls.localize('sev.warning', "Warning");
-	_displayStrings[Severity.Info] = nls.localize('sev.info', "Info");
+	const _error = 'error';
+	const _warning = 'warning';
+	const _warn = 'warn';
+	const _info = 'info';
 
 	/**
 	 * Parses 'error', 'warning', 'warn', 'info' in call casings
@@ -46,16 +39,7 @@ namespace Severity {
 		if (strings.equalsIgnoreCase(_info, value)) {
 			return Severity.Info;
 		}
-
 		return Severity.Ignore;
-	}
-
-	export function toString(value: Severity): string {
-		return _displayStrings[value] || strings.empty;
-	}
-
-	export function compare(a: Severity, b: Severity): number {
-		return b - a;
 	}
 }
 

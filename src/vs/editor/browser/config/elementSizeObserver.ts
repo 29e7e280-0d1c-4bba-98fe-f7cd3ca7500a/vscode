@@ -2,27 +2,59 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
-import Lifecycle = require('vs/base/common/lifecycle');
-import EditorBrowser = require('vs/editor/browser/editorBrowser');
-import EditorCommon = require('vs/editor/common/editorCommon');
+import { Disposable } from 'vs/base/common/lifecycle';
+import { IDimension } from 'vs/editor/common/editorCommon';
 
-export class ElementSizeObserver implements Lifecycle.IDisposable {
+interface ResizeObserver {
+	observe(target: Element): void;
+	unobserve(target: Element): void;
+	disconnect(): void;
+}
 
-	private referenceDomElement:HTMLElement;
-	private measureReferenceDomElementToken:number;
-	private changeCallback:()=>void;
-	private width:number;
-	private height:number;
+interface ResizeObserverSize {
+	inlineSize: number;
+	blockSize: number;
+}
 
-	constructor(referenceDomElement:HTMLElement, changeCallback:()=>void) {
+interface ResizeObserverEntry {
+	readonly target: Element;
+	readonly contentRect: DOMRectReadOnly;
+	readonly borderBoxSize: ResizeObserverSize;
+	readonly contentBoxSize: ResizeObserverSize;
+}
+
+type ResizeObserverCallback = (entries: ReadonlyArray<ResizeObserverEntry>, observer: ResizeObserver) => void;
+
+declare const ResizeObserver: {
+	prototype: ResizeObserver;
+	new(callback: ResizeObserverCallback): ResizeObserver;
+};
+
+
+export class ElementSizeObserver extends Disposable {
+
+	private readonly referenceDomElement: HTMLElement | null;
+	private readonly changeCallback: () => void;
+	private width: number;
+	private height: number;
+	private resizeObserver: ResizeObserver | null;
+	private measureReferenceDomElementToken: number;
+
+	constructor(referenceDomElement: HTMLElement | null, dimension: IDimension | undefined, changeCallback: () => void) {
+		super();
 		this.referenceDomElement = referenceDomElement;
 		this.changeCallback = changeCallback;
-		this.measureReferenceDomElementToken = -1;
 		this.width = -1;
 		this.height = -1;
-		this.measureReferenceDomElement(false);
+		this.resizeObserver = null;
+		this.measureReferenceDomElementToken = -1;
+		this.measureReferenceDomElement(false, dimension);
+	}
+
+	public dispose(): void {
+		this.stopObserving();
+		super.dispose();
 	}
 
 	public getWidth(): number {
@@ -33,30 +65,44 @@ export class ElementSizeObserver implements Lifecycle.IDisposable {
 		return this.height;
 	}
 
-	public dispose(): void {
-		this.stopObserving();
-	}
-
 	public startObserving(): void {
-		if (this.measureReferenceDomElementToken === -1) {
-			this.measureReferenceDomElementToken = window.setInterval(() => this.measureReferenceDomElement(true), 100);
+		if (typeof ResizeObserver !== 'undefined') {
+			if (!this.resizeObserver && this.referenceDomElement) {
+				this.resizeObserver = new ResizeObserver((entries) => {
+					if (entries && entries[0] && entries[0].contentRect) {
+						this.observe({ width: entries[0].contentRect.width, height: entries[0].contentRect.height });
+					} else {
+						this.observe();
+					}
+				});
+				this.resizeObserver.observe(this.referenceDomElement);
+			}
+		} else {
+			if (this.measureReferenceDomElementToken === -1) {
+				// setInterval type defaults to NodeJS.Timeout instead of number, so specify it as a number
+				this.measureReferenceDomElementToken = <number><any>setInterval(() => this.observe(), 100);
+			}
 		}
 	}
 
 	public stopObserving(): void {
+		if (this.resizeObserver) {
+			this.resizeObserver.disconnect();
+			this.resizeObserver = null;
+		}
 		if (this.measureReferenceDomElementToken !== -1) {
-			window.clearInterval(this.measureReferenceDomElementToken);
+			clearInterval(this.measureReferenceDomElementToken);
 			this.measureReferenceDomElementToken = -1;
 		}
 	}
 
-	public observe(dimension?:EditorCommon.IDimension): void {
+	public observe(dimension?: IDimension): void {
 		this.measureReferenceDomElement(true, dimension);
 	}
 
-	private measureReferenceDomElement(callChangeCallback:boolean, dimension?:EditorCommon.IDimension): void {
-		var observedWidth = 0;
-		var observedHeight = 0;
+	private measureReferenceDomElement(callChangeCallback: boolean, dimension?: IDimension): void {
+		let observedWidth = 0;
+		let observedHeight = 0;
 		if (dimension) {
 			observedWidth = dimension.width;
 			observedHeight = dimension.height;

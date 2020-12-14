@@ -1,31 +1,9 @@
-# Tests
+# VSCode Tests
 
-## Run
+## Contents
 
-The best way to run the Code tests is from within VS Code. Simply press `CMD+Shift+T` (`Ctrl+Shift+T` on Windows) to launch the tests.
-
-If you wish to run the tests from a terminal, from the `vscode` folder run:
-
-OSX and Linux
-
-	./test/run.sh
-
-Windows
-
-	test\run
-
-## Debug
-
-You can use VS Code to debug your tests. Switch to the Debug viewlet, pick the `Unit Tests` debug target and press `Play`.
-
-## Coverage
-
-The following command will create a `coverage` folder at the root of the workspace:
-
-OSX and Linux
-
-	./test/run.sh --coverage
-
-Windows
-
-	test\run --coverage
+This folder contains the various test runners for VSCode. Please refer to the documentation within for how to run them:
+* `unit`: our suite of unit tests ([README](unit/README.md))
+* `integration`: our suite of API tests ([README](integration/browser/README.md))
+* `smoke`: our suite of automated UI tests ([README](smoke/README.md))
+* `ui`: our suite of manual UI tests

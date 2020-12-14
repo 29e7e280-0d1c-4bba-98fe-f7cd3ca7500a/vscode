@@ -2,116 +2,61 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
-/**
- * Represents a UUID as defined by rfc4122.
- */
-export interface UUID {
 
-	/**
-	 * Returns the canonical representation in sets of
-	 * hexadecimal numbers separated by dashes.
-	 */
-	asHex():string;
+const _UUIDPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-	equals(other:UUID):boolean;
+export function isUUID(value: string): boolean {
+	return _UUIDPattern.test(value);
 }
 
-class ValueUUID implements UUID {
-
-	constructor(public _value:string) {
-		// empty
-	}
-
-	public asHex():string {
-		return this._value;
-	}
-
-	public equals(other:UUID):boolean {
-		return this.asHex() === other.asHex();
-	}
+// prep-work
+const _data = new Uint8Array(16);
+const _hex: string[] = [];
+for (let i = 0; i < 256; i++) {
+	_hex.push(i.toString(16).padStart(2, '0'));
 }
 
-class V4UUID extends ValueUUID {
-
-	private static _chars = ['0', '1', '2', '3', '4', '5', '6', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'];
-
-	private static _timeHighBits = ['8', '9', 'a', 'b'];
-
-	private static _oneOf(array:string[]):string {
-		var idx = Math.floor(array.length * Math.random());
-		return array[idx];
+// todo@jrieken
+// 1. node nodejs use`crypto#randomBytes`, see: https://nodejs.org/docs/latest/api/crypto.html#crypto_crypto_randombytes_size_callback
+// 2. use browser-crypto
+const _fillRandomValues = function (bucket: Uint8Array): Uint8Array {
+	for (let i = 0; i < bucket.length; i++) {
+		bucket[i] = Math.floor(Math.random() * 256);
 	}
+	return bucket;
+};
 
-	private static _randomHex():string {
-		return V4UUID._oneOf(V4UUID._chars);
-	}
+export function generateUuid(): string {
+	// get data
+	_fillRandomValues(_data);
 
-	constructor() {
-		super([
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			'-',
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			'-',
-			'4',
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			'-',
-			V4UUID._oneOf(V4UUID._timeHighBits),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			'-',
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-			V4UUID._randomHex(),
-		].join(''));
-	}
-}
+	// set version bits
+	_data[6] = (_data[6] & 0x0f) | 0x40;
+	_data[8] = (_data[8] & 0x3f) | 0x80;
 
-/**
- * An empty UUID that contains only zeros.
- */
-export var empty:UUID = new ValueUUID('00000000-0000-0000-0000-000000000000');
-
-export function v4():UUID {
-	return new V4UUID();
-}
-
-var _UUIDPattern = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
-
-/**
- * Parses a UUID that is of the format xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.
- * @param value A uuid string.
- */
-export function parse(value:string):UUID {
-	if(!_UUIDPattern.test(value)) {
-		throw new Error('invalid uuid');
-	}
-	return new ValueUUID(value);
-}
-
-export function generateUuid():string {
-	return v4().asHex();
+	// print as string
+	let i = 0;
+	let result = '';
+	result += _hex[_data[i++]];
+	result += _hex[_data[i++]];
+	result += _hex[_data[i++]];
+	result += _hex[_data[i++]];
+	result += '-';
+	result += _hex[_data[i++]];
+	result += _hex[_data[i++]];
+	result += '-';
+	result += _hex[_data[i++]];
+	result += _hex[_data[i++]];
+	result += '-';
+	result += _hex[_data[i++]];
+	result += _hex[_data[i++]];
+	result += '-';
+	result += _hex[_data[i++]];
+	result += _hex[_data[i++]];
+	result += _hex[_data[i++]];
+	result += _hex[_data[i++]];
+	result += _hex[_data[i++]];
+	result += _hex[_data[i++]];
+	return result;
 }

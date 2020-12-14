@@ -3,73 +3,92 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as assert from 'assert';
-import {EditorModel} from 'vs/workbench/common/editor';
-import {BaseTextEditorModel} from 'vs/workbench/browser/parts/editor/textEditorModel';
-import {TextDiffEditorModel} from 'vs/workbench/browser/parts/editor/textDiffEditorModel';
-import {DiffEditorInput} from 'vs/workbench/browser/parts/editor/diffEditorInput';
-import {StringEditorInput} from 'vs/workbench/browser/parts/editor/stringEditorInput';
-import {StringEditorModel} from 'vs/workbench/browser/parts/editor/stringEditorModel';
-import * as InstantiationService from 'vs/platform/instantiation/common/instantiationService';
-import {createMockModelService, createMockModeService} from 'vs/editor/test/common/servicesTestUtils';
+import { TestInstantiationService } from 'vs/platform/instantiation/test/common/instantiationServiceMock';
+import { EditorModel } from 'vs/workbench/common/editor';
+import { BaseTextEditorModel } from 'vs/workbench/common/editor/textEditorModel';
+import { IModelService } from 'vs/editor/common/services/modelService';
+import { IModeService } from 'vs/editor/common/services/modeService';
+import { ModeServiceImpl } from 'vs/editor/common/services/modeServiceImpl';
+import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
+import { TestConfigurationService } from 'vs/platform/configuration/test/common/testConfigurationService';
+import { ModelServiceImpl } from 'vs/editor/common/services/modelServiceImpl';
+import { ITextBufferFactory } from 'vs/editor/common/model';
+import { URI } from 'vs/base/common/uri';
+import { createTextBufferFactory } from 'vs/editor/common/model/textModel';
+import { ITextResourcePropertiesService } from 'vs/editor/common/services/textResourceConfigurationService';
+import { IUndoRedoService } from 'vs/platform/undoRedo/common/undoRedo';
+import { UndoRedoService } from 'vs/platform/undoRedo/common/undoRedoService';
+import { TestDialogService } from 'vs/platform/dialogs/test/common/testDialogService';
+import { IDialogService } from 'vs/platform/dialogs/common/dialogs';
+import { TestNotificationService } from 'vs/platform/notification/test/common/testNotificationService';
+import { INotificationService } from 'vs/platform/notification/common/notification';
+import { TestTextResourcePropertiesService } from 'vs/workbench/test/common/workbenchTestServices';
+import { IThemeService } from 'vs/platform/theme/common/themeService';
+import { TestThemeService } from 'vs/platform/theme/test/common/testThemeService';
 
 class MyEditorModel extends EditorModel { }
-class MyTextEditorModel extends BaseTextEditorModel { }
+class MyTextEditorModel extends BaseTextEditorModel {
+	createTextEditorModel(value: ITextBufferFactory, resource?: URI, preferredMode?: string) {
+		return super.createTextEditorModel(value, resource, preferredMode);
+	}
 
-suite("Workbench - EditorModel", () => {
+	isReadonly(): boolean {
+		return false;
+	}
+}
 
-	test("EditorModel", function(done) {
-		let m = new MyEditorModel();
-		m.load().then(function(model) {
-			assert(model === m);
-			assert.strictEqual(m.isResolved(), true);
-		}).done(() => done());
+suite('Workbench editor model', () => {
+
+	let instantiationService: TestInstantiationService;
+	let modeService: IModeService;
+
+	setup(() => {
+		instantiationService = new TestInstantiationService();
+		modeService = instantiationService.stub(IModeService, ModeServiceImpl);
 	});
 
-	test("BaseTextEditorModel", function(done) {
-		let modelService = createMockModelService();
-		let modeService = createMockModeService();
+	test('EditorModel', async () => {
+		let counter = 0;
+
+		let m = new MyEditorModel();
+
+		m.onDispose(() => {
+			assert(true);
+			counter++;
+		});
+
+		const model = await m.load();
+		assert(model === m);
+		assert.equal(model.isDisposed(), false);
+		assert.strictEqual(m.isResolved(), true);
+		m.dispose();
+		assert.equal(counter, 1);
+		assert.equal(model.isDisposed(), true);
+	});
+
+	test('BaseTextEditorModel', async () => {
+		let modelService = stubModelService(instantiationService);
 
 		let m = new MyTextEditorModel(modelService, modeService);
-		m.load().then(function(model: any) {
-			assert(model === m);
-			return model.createTextEditorModel("foo", "text/plain").then(function() {
-				assert.strictEqual(m.isResolved(), true);
-			});
-		}).done(() => {
-			m.dispose();
-			done();
-		});
+		const model = await m.load() as MyTextEditorModel;
+
+		assert(model === m);
+		model.createTextEditorModel(createTextBufferFactory('foo'), null!, 'text/plain');
+		assert.strictEqual(m.isResolved(), true);
+		m.dispose();
 	});
 
-	test("TextDiffEditorModel", function(done) {
-		let inst = InstantiationService.create({
-			modeService: createMockModeService(),
-			modelService: createMockModelService(),
-		});
-		let input = inst.createInstance(StringEditorInput, "name", 'description', "value", "text/plain", false);
-		let otherInput = inst.createInstance(StringEditorInput, "name2", 'description', "value2", "text/plain", false);
-		let diffInput = new DiffEditorInput("name", "description", input, otherInput);
-
-		diffInput.resolve(true).then(function(model: any) {
-			assert(model);
-			assert(model instanceof TextDiffEditorModel);
-
-			let diffEditorModel = model.textDiffEditorModel;
-			assert(diffEditorModel.original);
-			assert(diffEditorModel.modified);
-
-			return diffInput.resolve(true).then(function(model: any) {
-				assert(model.isResolved());
-
-				assert(diffEditorModel !== model.textDiffEditorModel);
-				diffInput.dispose();
-				assert(!model.textDiffEditorModel);
-			});
-		}).done(() => {
-			done();
-		});
-	});
+	function stubModelService(instantiationService: TestInstantiationService): IModelService {
+		const dialogService = new TestDialogService();
+		const notificationService = new TestNotificationService();
+		const undoRedoService = new UndoRedoService(dialogService, notificationService);
+		instantiationService.stub(IConfigurationService, new TestConfigurationService());
+		instantiationService.stub(ITextResourcePropertiesService, new TestTextResourcePropertiesService(instantiationService.get(IConfigurationService)));
+		instantiationService.stub(IDialogService, dialogService);
+		instantiationService.stub(INotificationService, notificationService);
+		instantiationService.stub(IUndoRedoService, undoRedoService);
+		instantiationService.stub(IThemeService, new TestThemeService());
+		return instantiationService.createInstance(ModelServiceImpl);
+	}
 });

@@ -4,26 +4,21 @@
  *--------------------------------------------------------------------------------------------*/
 
 .monaco-count-badge {
-	min-width: 18px;
-	padding: 0 3px;
-	margin: 4px 13px 0 6px;
-	border-radius: 8px;
+	padding: 3px 6px;
+	border-radius: 11px;
 	font-size: 11px;
-	line-height: 16px;
+	min-width: 18px;
+	min-height: 18px;
+	line-height: 11px;
 	font-weight: normal;
 	text-align: center;
-	background: #BEBEBE;
-	color: #FFF;
+	display: inline-block;
+	box-sizing: border-box;
 }
 
-.vs-dark .monaco-count-badge {
-	color: #FFF;
-	background: #4D4D4D;
-}
-
-/* High Contrast Theming */
-.hc-black .monaco-count-badge {
-	background: #000;
-	border: 1px solid #6FC3DF;
-	margin-top: 2px;
+.monaco-count-badge.long {
+	padding: 2px 3px;
+	border-radius: 2px;
+	min-height: auto;
+	line-height: normal;
 }

@@ -3,31 +3,21 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as assert from 'assert';
-import {EditorInput} from 'vs/workbench/common/editor';
-import {EditorDescriptor} from 'vs/workbench/browser/parts/editor/baseEditor';
-import {DiffEditorInput} from 'vs/workbench/browser/parts/editor/diffEditorInput';
-import {ResourceEditorInput} from 'vs/workbench/browser/parts/editor/resourceEditorInput';
+import { EditorInput } from 'vs/workbench/common/editor';
+import { DiffEditorInput } from 'vs/workbench/common/editor/diffEditorInput';
+import { workbenchInstantiationService } from 'vs/workbench/test/browser/workbenchTestServices';
 
 class MyEditorInput extends EditorInput {
-	getMime() {
-		return 'text/css';
-	}
+	readonly resource = undefined;
 
-	public getId(): string {
-		return '';
-	}
-
-	public resolve(refresh?: boolean): any {
-		return null;
-	}
+	getTypeId(): string { return ''; }
+	resolve(): any { return null; }
 }
 
-suite("Workbench - EditorInput", () => {
+suite('Workbench editor input', () => {
 
-	test("EditorInput", function() {
+	test('EditorInput', () => {
 		let counter = 0;
 		let input = new MyEditorInput();
 		let otherInput = new MyEditorInput();
@@ -35,9 +25,9 @@ suite("Workbench - EditorInput", () => {
 		assert(input.matches(input));
 		assert(!input.matches(otherInput));
 		assert(!input.matches(null));
-		assert(!input.getName());
+		assert(input.getName());
 
-		input.addListener("dispose", function() {
+		input.onDispose(() => {
 			assert(true);
 			counter++;
 		});
@@ -46,39 +36,43 @@ suite("Workbench - EditorInput", () => {
 		assert.equal(counter, 1);
 	});
 
-	test("DiffEditorInput", function() {
+	test('DiffEditorInput', () => {
+		const instantiationService = workbenchInstantiationService();
+
 		let counter = 0;
 		let input = new MyEditorInput();
-		input.addListener("dispose", function() {
+		input.onDispose(() => {
 			assert(true);
 			counter++;
 		});
 
 		let otherInput = new MyEditorInput();
-		otherInput.addListener("dispose", function() {
+		otherInput.onDispose(() => {
 			assert(true);
 			counter++;
 		});
 
-		let diffInput = new DiffEditorInput("name", "description", input, otherInput);
+		let diffInput = instantiationService.createInstance(DiffEditorInput, 'name', 'description', input, otherInput, undefined);
 
-		assert.equal(diffInput.getOriginalInput(), input);
-		assert.equal(diffInput.getModifiedInput(), otherInput);
+		assert.equal(diffInput.originalInput, input);
+		assert.equal(diffInput.modifiedInput, otherInput);
 		assert(diffInput.matches(diffInput));
 		assert(!diffInput.matches(otherInput));
 		assert(!diffInput.matches(null));
 
 		diffInput.dispose();
-		assert.equal(counter, 2);
+		assert.equal(counter, 0);
 	});
 
-	test("DiffEditorInput disposes when input inside disposes", function() {
+	test('DiffEditorInput disposes when input inside disposes', function () {
+		const instantiationService = workbenchInstantiationService();
+
 		let counter = 0;
 		let input = new MyEditorInput();
 		let otherInput = new MyEditorInput();
 
-		let diffInput = new DiffEditorInput("name", "description", input, otherInput);
-		diffInput.addListener("dispose", function() {
+		let diffInput = instantiationService.createInstance(DiffEditorInput, 'name', 'description', input, otherInput, undefined);
+		diffInput.onDispose(() => {
 			counter++;
 			assert(true);
 		});
@@ -88,62 +82,13 @@ suite("Workbench - EditorInput", () => {
 		input = new MyEditorInput();
 		otherInput = new MyEditorInput();
 
-		let diffInput2 = new DiffEditorInput("name", "description", input, otherInput);
-		diffInput2.addListener("dispose", function() {
+		let diffInput2 = instantiationService.createInstance(DiffEditorInput, 'name', 'description', input, otherInput, undefined);
+		diffInput2.onDispose(() => {
 			counter++;
 			assert(true);
 		});
 
 		otherInput.dispose();
 		assert.equal(counter, 2);
-	});
-
-	test("DiffEditorInput - get preferred editor", function() {
-		let input: EditorInput = new ResourceEditorInput("name", "description", "url", "text/css", void 0, void 0, void 0, null);
-		let otherInput: EditorInput = new ResourceEditorInput("name2", "description", "url2", "text/html", void 0, void 0, void 0, null);
-		let diffInput = new DiffEditorInput("name", "description", input, otherInput);
-
-		assert.strictEqual(diffInput.getPreferredEditorId([]), 'workbench.editors.textDiffEditor');
-
-		input = new ResourceEditorInput("name", "description", "url", "text/css", void 0, void 0, void 0, null);
-		otherInput = new ResourceEditorInput("name2", "description", "url2", "application/zip, application/octet-stream", void 0, void 0, void 0, null);
-		diffInput = new DiffEditorInput("name", "description", input, otherInput);
-
-		assert.strictEqual(diffInput.getPreferredEditorId([]), 'workbench.editors.binaryResourceDiffEditor');
-
-		input = new MyEditorInput();
-		otherInput = new MyEditorInput();
-
-		diffInput = new DiffEditorInput("name", "description", input, otherInput);
-
-		assert.strictEqual(diffInput.getPreferredEditorId([]), 'workbench.editors.textDiffEditor');
-	});
-
-	test("ResourceEditorInput", function() {
-		let input = new ResourceEditorInput("name", "description", "url", "mime", void 0, void 0, void 0, null);
-		let otherInput = new ResourceEditorInput("name2", "description", "url2", "mime2", void 0, void 0, void 0, null);
-
-		assert(input.matches(input));
-		assert(!input.matches(otherInput));
-		assert(!input.matches(null));
-	});
-
-	test("ResourceEditorInput#getPreferredEditorId", function() {
-		let editors = ['workbench.editors.stringEditor', 'workbench.editors.binaryResourceEditor'];
-
-		let input = new ResourceEditorInput("name", "description", "url", "text/plain", void 0, void 0, void 0, null);
-		assert(input.getPreferredEditorId(editors) === 'workbench.editors.stringEditor');
-
-		input = new ResourceEditorInput("name", "description", "url", "application/foo, text/plain", void 0, void 0, void 0, null);
-		assert(input.getPreferredEditorId(editors) === 'workbench.editors.stringEditor');
-
-		input = new ResourceEditorInput("name", "description", "url", "application/xml, text/plain", void 0, void 0, void 0, null);
-		assert(input.getPreferredEditorId(editors) === 'workbench.editors.stringEditor');
-
-		input = new ResourceEditorInput("name", "description", "url", "application/octet-stream", void 0, void 0, void 0, null);
-		assert(input.getPreferredEditorId(editors) === 'workbench.editors.binaryResourceEditor');
-
-		input = new ResourceEditorInput("name", "description", "url", "image/png, application/octet-stream", void 0, void 0, void 0, null);
-		assert(input.getPreferredEditorId(editors) === 'workbench.editors.binaryResourceEditor');
 	});
 });
